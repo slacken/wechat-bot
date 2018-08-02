@@ -21,7 +21,7 @@ module WeChat::Bot
     end
 
     GROUP_MESSAGE_REGEX = /^(@\w+):<br\/>(.*)$/
-    AT_MESSAGE_REGEX = /@([^\s]+) (.*)/
+    AT_MESSAGE_REGEX = /@([^\s]+?) /
 
     # 原始消息
     # @return [Hash<Object, Object>]
@@ -99,7 +99,7 @@ module WeChat::Bot
       if match = group_message(message)
         # from_username = match[0]
         message = match[1]
-        @at_message_name = match[2]
+        @at_message_names = match[2]
       end
 
       @message = message
@@ -140,7 +140,7 @@ module WeChat::Bot
     end
 
     def at_message?
-      !@at_message_name.nil?
+      !( @at_message_names.nil? || @at_message_names.empty? )
     end
 
     private
@@ -272,11 +272,11 @@ module WeChat::Bot
     # @param [String] message 原始消息
     # @return [String] 文本消息，如果不是 @ 消息返回原始消息
     def at_message(message)
-      if match = AT_MESSAGE_REGEX.match(message)
-        [match[2].strip, match[1]]
-      else
-        [message, nil]
-      end
+      at_names = []
+      [
+        message.gsub(AT_MESSAGE_REGEX){ at_names << $1; "" },
+        at_names
+      ]
     end
   end
 end
