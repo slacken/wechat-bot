@@ -90,6 +90,10 @@ module WeChat::Bot
       attr(:members)
     end
 
+    def find_member(username)
+      members.find{|contact| username == contact.username }
+    end
+
     # 联系人解析
     #
     # @param [Hash<Object, Object>] raw
@@ -117,7 +121,7 @@ module WeChat::Bot
     end
 
     def to_s
-      "#<#{self.class}:#{object_id.to_s(16)} username='#{username}' nickname='#{nickname}' kind='#{kind}'>"
+      "#<#{self.class}:#{object_id.to_s(16)} username='#{username}' nickname='#{nickname}' kind='#{kind}' members=#{members.size}>"
     end
 
     private

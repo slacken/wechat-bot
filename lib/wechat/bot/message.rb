@@ -50,6 +50,8 @@ module WeChat::Bot
     # 用户或者群组
     # @return [Contact]
     attr_reader :from
+    # 群组消息时为消息用户，其余为from
+    attr_reader :from_user
 
     # 消息正文
     # @return [String]
@@ -94,17 +96,22 @@ module WeChat::Bot
       parse_source
       parse_kind
 
+      # TODO: 来自于特殊账户无法获取联系人信息，需要单独处理
+      @from = @bot.contact_list.find(username: @raw["FromUserName"])
+
       message = @raw["Content"].convert_emoji
       message = CGI.unescape_html(message) if @kinde != Message::Kind::Text
+
       if match = group_message(message)
-        # from_username = match[0]
         message = match[1]
+        @from_user = @from.find_member(match[0])
         @at_message_names = match[2]
+      else
+        @from_user = @from
       end
 
       @message = message
-      # TODO: 来自于特殊账户无法获取联系人信息，需要单独处理
-      @from = @bot.contact_list.find(username: @raw["FromUserName"])
+      
       parse_emoticon if @kind == Message::Kind::Emoticon
 
       case @kind
