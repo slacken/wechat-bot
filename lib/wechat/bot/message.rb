@@ -1,3 +1,4 @@
+require "cgi"
 require "wechat/bot/message_data/share_card"
 
 module WeChat::Bot
@@ -20,7 +21,7 @@ module WeChat::Bot
     end
 
     GROUP_MESSAGE_REGEX = /^(@\w+):<br\/>(.*)$/
-    AT_MESSAGE_REGEX = /@([^\s]+) (.*)/
+    AT_MESSAGE_REGEX = /@([^\s]+?) /
 
     # 原始消息
     # @return [Hash<Object, Object>]
@@ -49,6 +50,8 @@ module WeChat::Bot
     # 用户或者群组
     # @return [Contact]
     attr_reader :from
+    # 群组消息时为消息用户，其余为from
+    attr_reader :from_user
 
     # 消息正文
     # @return [String]
@@ -93,16 +96,22 @@ module WeChat::Bot
       parse_source
       parse_kind
 
+      # TODO: 来自于特殊账户无法获取联系人信息，需要单独处理
+      @from = @bot.contact_list.find(username: @raw["FromUserName"])
+
       message = @raw["Content"].convert_emoji
       message = CGI.unescape_html(message) if @kinde != Message::Kind::Text
+
       if match = group_message(message)
-        # from_username = match[0]
         message = match[1]
+        @from_user = @from.find_member(username: match[0])
+        @at_message_names = match[2]
+      else
+        @from_user = @from
       end
 
       @message = message
-      # TODO: 来自于特殊账户无法获取联系人信息，需要单独处理
-      @from = @bot.contact_list.find(username: @raw["FromUserName"])
+      
       parse_emoticon if @kind == Message::Kind::Emoticon
 
       case @kind
@@ -138,8 +147,23 @@ module WeChat::Bot
     end
 
     def at_message?
-      @at_mesage == true
+      !( @at_message_names.nil? || @at_message_names.empty? )
     end
+
+    def at_members
+      if at_message?
+        @at_message_names.map{|nickname| from.find_member(nickname: nickname) }
+      else
+        []
+      end
+    end
+
+    # 私聊或者群聊被@
+    def talked_to?
+      (source == Contact::Kind::User) || at_members.any?{|member| !!member && (member.username == @raw['ToUserName']) }
+    end
+
+    private
 
     # 解析消息来源
     #
@@ -217,11 +241,7 @@ module WeChat::Bot
       @events << @kind
       @events << @source
 
-      @at_mesage = false
-      if @source == :group && @raw["Content"] =~ /@([^\s]+)\s+(.*)/
-        @events << :at_message
-        @at_mesage = true
-      end
+      @events << :at_message if at_message?
     end
 
     # 解析表情
@@ -258,10 +278,10 @@ module WeChat::Bot
     #   - 1 message
     def group_message(message)
       if match = GROUP_MESSAGE_REGEX.match(message)
-        return [match[1], at_message(match[2])]
+        at_message(match[2]).unshift(match[1])
+      else
+        false
       end
-
-      false
     end
 
     # 尝试解析群聊中的 @ 消息
@@ -272,11 +292,11 @@ module WeChat::Bot
     # @param [String] message 原始消息
     # @return [String] 文本消息，如果不是 @ 消息返回原始消息
     def at_message(message)
-      if match = AT_MESSAGE_REGEX.match(message)
-        return match[2].strip
-      end
-
-      message
+      at_names = []
+      [
+        message.gsub(AT_MESSAGE_REGEX){ at_names << $1; "" },
+        at_names
+      ]
     end
   end
 end
