@@ -72,11 +72,11 @@ module WeChat::Bot
     end
 
     def format_verbose(message)
-      "VERBOSE [#{timestamp}] #{message.colorize(:light_black)}"
+      "VERBOSE [#{timestamp}] #{message.colorize(:light_black) rescue message}"
     end
 
     def format_debug(message)
-      "DEBUG   [#{timestamp}] #{message.colorize(:light_black)}"
+      "DEBUG   [#{timestamp}] #{message.colorize(:light_black) rescue message}"
     end
 
     def format_info(message)
@@ -84,15 +84,15 @@ module WeChat::Bot
     end
 
     def format_warn(message)
-      "WRAN    [#{timestamp}] #{message.colorize(:yellow)}"
+      "WRAN    [#{timestamp}] #{message.colorize(:yellow) rescue message}"
     end
 
     def format_error(message)
-      "ERROR   [#{timestamp}] #{message.colorize(:light_red)}"
+      "ERROR   [#{timestamp}] #{message.colorize(:light_red) rescue message}"
     end
 
     def format_fatal(message)
-      "FATAL   [#{timestamp}] #{message.colorize(:red)}"
+      "FATAL   [#{timestamp}] #{message.colorize(:red) rescue message}"
     end
 
     def timestamp

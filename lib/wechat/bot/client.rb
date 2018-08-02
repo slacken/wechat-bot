@@ -258,7 +258,7 @@ module WeChat::Bot
 
       # raise RuntimeException "微信数据同步异常，原始返回内容：#{r.to_s}" if data.nil?
 
-      @bot.logger.debug "HeartBeat: retcode/selector #{data[:retcode]}/#{data[:selector]}"
+      @bot.logger.debug "HeartBeat: retcode/selector #{data.nil? ? "exception" :  [data[:retcode], data[:selector]].join('/')}"
       data
     end
 
