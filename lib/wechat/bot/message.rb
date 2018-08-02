@@ -104,7 +104,7 @@ module WeChat::Bot
 
       if match = group_message(message)
         message = match[1]
-        @from_user = @from.find_member(match[0])
+        @from_user = @from.find_member(username: match[0])
         @at_message_names = match[2]
       else
         @from_user = @from
@@ -148,6 +148,19 @@ module WeChat::Bot
 
     def at_message?
       !( @at_message_names.nil? || @at_message_names.empty? )
+    end
+
+    def at_members
+      if at_message?
+        @at_message_names.map{|nickname| from.find_member(nickname: nickname) }
+      else
+        []
+      end
+    end
+
+    # 私聊或者群聊被@
+    def talked_to?
+      (source == Contact::Kind::User) || at_members.any?{|member| !!member && (member.username == @raw['ToUserName']) }
     end
 
     private
