@@ -99,6 +99,7 @@ module WeChat::Bot
       if match = group_message(message)
         # from_username = match[0]
         message = match[1]
+        @at_message_name = match[2]
       end
 
       @message = message
@@ -139,8 +140,10 @@ module WeChat::Bot
     end
 
     def at_message?
-      @at_mesage == true
+      !@at_message_name.nil?
     end
+
+    private
 
     # 解析消息来源
     #
@@ -218,11 +221,7 @@ module WeChat::Bot
       @events << @kind
       @events << @source
 
-      @at_mesage = false
-      if @source == :group && @raw["Content"] =~ /@([^\s]+)\s+(.*)/
-        @events << :at_message
-        @at_mesage = true
-      end
+      @events << :at_message if at_message?
     end
 
     # 解析表情
@@ -259,10 +258,10 @@ module WeChat::Bot
     #   - 1 message
     def group_message(message)
       if match = GROUP_MESSAGE_REGEX.match(message)
-        return [match[1], at_message(match[2])]
+        at_message(match[2]).unshift(match[1])
+      else
+        false
       end
-
-      false
     end
 
     # 尝试解析群聊中的 @ 消息
@@ -274,10 +273,10 @@ module WeChat::Bot
     # @return [String] 文本消息，如果不是 @ 消息返回原始消息
     def at_message(message)
       if match = AT_MESSAGE_REGEX.match(message)
-        return match[2].strip
+        [match[2].strip, match[1]]
+      else
+        [message, nil]
       end
-
-      message
     end
   end
 end
