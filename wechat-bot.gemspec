@@ -4,7 +4,7 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require 'wechat/bot/version'
 
 Gem::Specification.new do |spec|
-  spec.name          = "wechat-bot"
+  spec.name          = "wechat-bot2"
   spec.version       = WeChat::Bot::VERSION
   spec.authors       = ["icyleaf"]
   spec.email         = ["icyleaf.cn@gmail.com"]
