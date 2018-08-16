@@ -195,7 +195,7 @@ module WeChat::Bot
     #
     # 掉线后 300 秒可以重新使用此 api 登录获取的联系人和群ID保持不变
     def login_loading
-      url = "#{store(:index_url)}/webwxinit?r=#{timestamp}"
+      url = api_url('webwxinit', r: timestamp)
       r = @session.post(url, json: params_base_request)
       data = r.parse(:json)
 
@@ -215,7 +215,7 @@ module WeChat::Bot
     #
     # 需要解密参数 Code 的值的作用，目前都用的是 3
     def update_notice_status
-      url = "#{store(:index_url)}/webwxstatusnotify?lang=zh_CN&pass_ticket=#{store(:pass_ticket)}"
+      url = api_url('webwxstatusnotify', lang: 'zh_CN', pass_ticket: store(:pass_ticket))
       params = params_base_request.merge({
         "Code"  => 3,
         "FromUserName" => @bot.profile.username,
@@ -267,12 +267,11 @@ module WeChat::Bot
     # 根据 {#sync_check} 接口返回有数据时需要调用该接口
     # @return [void]
     def sync_messages
-      query = {
+      url = api_url('webwxsync', {
         "sid" => store(:sid),
         "skey" => store(:skey),
         "pass_ticket" => store(:pass_ticket)
-      }
-      url = "#{store(:index_url)}/webwxsync?#{URI.encode_www_form(query)}"
+      })
       params = params_base_request.merge({
         "SyncKey" => store(:sync_key),
         "rr" => "-#{timestamp}"
@@ -313,12 +312,11 @@ module WeChat::Bot
     #
     # @return [Hash] 联系人列表
     def contacts
-      query = {
+      url = api_url('webwxgetcontact', {
         "r" => timestamp,
         "pass_ticket" => store(:pass_ticket),
         "skey" => store(:skey)
-      }
-      url = "#{store(:index_url)}/webwxgetcontact?#{URI.encode_www_form(query)}"
+      })
 
       r = @session.post(url, json: {})
       data = r.parse(:json)
@@ -350,7 +348,7 @@ module WeChat::Bot
     # @param [String] text 消息内容
     # @return [Hash<Object,Object>] 发送结果状态
     def send_text(username, text)
-      url = "#{store(:index_url)}/webwxsendmsg"
+      url = api_url('webwxsendmsg')
       params = params_base_request.merge({
         "Scene" => 0,
         "Msg" => {
@@ -405,12 +403,11 @@ module WeChat::Bot
     #
     # @return [Hash<Object,Object>] 发送结果状态
     def send_emoticon(username, emoticon_id)
-      query = {
+      url = api_url('webwxsendemoticon', {
         'fun' => 'sys',
         'pass_ticket' => store(:pass_ticket),
         'lang' => 'zh_CN'
-      }
-      url = "#{store(:index_url)}/webwxsendemoticon?#{URI.encode_www_form(query)}"
+      })
       params = params_base_request.merge({
         "Scene" => 0,
         "Msg" => {
@@ -435,7 +432,7 @@ module WeChat::Bot
     # @param [String] message_id
     # @return [TempFile]
     def download_image(message_id)
-      url = "#{store(:index_url)}/webwxgetmsgimg"
+      url = api_url('webwxgetmsgimg')
       params = {
         "msgid" => message_id,
         "skey" => store(:skey)
@@ -460,7 +457,7 @@ module WeChat::Bot
     # @param [Array<String>] users
     # @return [Hash<Object, Object>]
     def create_group(*users)
-      url = "#{store(:index_url)}/webwxcreatechatroom?r=#{timestamp}"
+      url = api_url('webwxcreatechatroom', r: timestamp)
       params = params_base_request.merge({
         "Topic" => "",
         "MemberCount" => users.size,
@@ -476,7 +473,7 @@ module WeChat::Bot
 
     # 更新群组
     def update_group(username, fun, update_key, update_value)
-      url = "#{store(:index_url)}/webwxupdatechatroom?fun=#{fun}&pass_ticket=#{store(:pass_ticket)}"
+      url = api_url('webwxupdatechatroom', {fun: fun, pass_ticket: store(:pass_ticket)})
       params = params_base_request.merge({
         "ChatRoomName" => username,
         update_key => update_value
@@ -509,7 +506,7 @@ module WeChat::Bot
     #
     # @param [Integer] status: 2-添加 3-接受
     def add_friend(username, status = 2, verify_content='')
-      url = "#{store(:index_url)}/webwxverifyuser?r=#{timestamp}&pass_ticket=#{store(:pass_ticket)}"
+      url = api_url('webwxverifyuser', {r: timestamp, pass_ticket: store(:pass_ticket)})
       params = params_base_request.merge({
         "Opcode" => status, # 3
         "VerifyUserListSize" => 1,
@@ -530,7 +527,7 @@ module WeChat::Bot
     #
     # @return [void]
     def logout
-      url = "#{store(:index_url)}/webwxlogout"
+      url = api_url('webwxlogout')
       params = {
         "redirect" => 1,
         "type"  => 1,
@@ -558,6 +555,14 @@ module WeChat::Bot
     end
 
     private
+
+    def api_url(path, query = {})
+      if query.empty?
+        "#{store(:index_url)}/#{path}"
+      else
+        "#{store(:index_url)}/#{path}?#{URI.encode_www_form(query)}"
+      end
+    end
 
     # 保存和获取存储数据
     #
