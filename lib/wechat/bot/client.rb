@@ -471,6 +471,61 @@ module WeChat::Bot
       r.parse(:json)
     end
 
+    ##### 
+    # 以下接口都参考：https://github.com/littlecodersh/ItChat/blob/master/itchat/components/contact.py
+
+    # 更新群组
+    def update_group(username, fun, update_key, update_value)
+      url = "#{store(:index_url)}/webwxupdatechatroom?fun=#{fun}&pass_ticket=#{store(:pass_ticket)}"
+      params = params_base_request.merge({
+        "ChatRoomName" => username,
+        update_key => update_value
+        })
+      r = @session.post(url, json: params)
+      r.parse(:json)
+    end
+
+    # 修改群组名称
+    def set_group_name(username, name)
+      update_group(username, 'modtopic', 'NewTopic', name)
+    end
+
+    # 删除群组成员
+    def delete_group_member(username, *users)
+      update_group(username, 'delmember', 'DelMemberList', users.join(","))
+    end
+
+    # 群组邀请
+    def invite_group_member(username, users)
+      update_group(username, 'invitemember', 'InviteMemberList', users.join(","))
+    end
+
+    # 群组添加
+    def add_group_member(username, users)
+      update_group(username, 'addmember', 'AddMemberList', users.join(","))
+    end
+
+    # 添加好友
+    #
+    # @param [Integer] status: 2-添加 3-接受
+    def add_friend(username, status = 2, verify_content='')
+      url = "#{store(:index_url)}/webwxverifyuser?r=#{timestamp}&pass_ticket=#{store(:pass_ticket)}"
+      params = params_base_request.merge({
+        "Opcode" => status, # 3
+        "VerifyUserListSize" => 1,
+        "VerifyUserList" => [{
+          "Value" => username,
+          "VerifyUserTicket" => ''}],
+        "VerifyContent" => verify_content,
+        "SceneListCount" => 1,
+        "SceneList" => [33],
+        "skey" => store(:skey)
+      })
+      r = @session.post(url, json: params)
+      r.parse(:json)
+    end
+    ##### 
+
     # 登出
     #
     # @return [void]
