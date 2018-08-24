@@ -1,3 +1,5 @@
+require "wechat/bot/contact"
+
 module WeChat::Bot
   # 微信联系人列表
   class ContactList < CachedList
@@ -32,6 +34,21 @@ module WeChat::Bot
         end
 
         contact
+      end
+    end
+
+    Contact::Kind.constants.each do |const|
+      val = Contact::Kind.const_get(const)
+
+      # 查找用户分类: find_user/group/mp/special
+      define_method "find_#{val}", ->(pattern = nil) do
+        @mutex.synchronize do
+          return @cache.values.select do |contact| 
+            contact.kind == val && (
+              pattern.nil? || (pattern.is_a?(Regexp) && pattern.match?(contact.nickname.scrub)) || contact.nickname == pattern
+            )
+          end
+        end
       end
     end
 

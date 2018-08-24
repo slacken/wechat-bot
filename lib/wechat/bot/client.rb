@@ -141,7 +141,7 @@ module WeChat::Bot
     #
     # @return [Array]
     def login_status(uuid)
-      timestamp = timestamp
+      timestamp = timestamp()
       params = {
         "loginicon" => "true",
         "uuid" => uuid,
@@ -457,7 +457,7 @@ module WeChat::Bot
     # @param [Array<String>] users
     # @return [Hash<Object, Object>]
     def create_group(*users)
-      url = api_url('webwxcreatechatroom', r: timestamp)
+      url = api_url('webwxcreatechatroom', r: timestamp, pass_ticket: store(:pass_ticket))
       params = params_base_request.merge({
         "Topic" => "",
         "MemberCount" => users.size,
@@ -493,12 +493,12 @@ module WeChat::Bot
     end
 
     # 群组邀请
-    def invite_group_member(username, users)
+    def invite_group_member(username, *users)
       update_group(username, 'invitemember', 'InviteMemberList', users.join(","))
     end
 
     # 群组添加
-    def add_group_member(username, users)
+    def add_group_member(username, *users)
       update_group(username, 'addmember', 'AddMemberList', users.join(","))
     end
 
@@ -557,11 +557,7 @@ module WeChat::Bot
     private
 
     def api_url(path, query = {})
-      if query.empty?
-        "#{store(:index_url)}/#{path}"
-      else
-        "#{store(:index_url)}/#{path}?#{URI.encode_www_form(query)}"
-      end
+      "#{store(:index_url)}/#{path}#{query.empty? ? '' : '?'+URI.encode_www_form(query)}"
     end
 
     # 保存和获取存储数据

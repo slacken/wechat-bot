@@ -68,7 +68,7 @@ module WeChat::Bot
     # @param [Array<Object>] args
     # @yieldparam [Array<String>]
     # @return [Handler]
-    def on(event, regexp = //, *args, &block)
+    def on(event, regexp = %r{}, *args, &block)
       event = event.to_s.to_sym
 
       pattern = case regexp
