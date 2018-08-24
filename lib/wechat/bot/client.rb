@@ -337,6 +337,8 @@ module WeChat::Bot
       case type
       when :emoticon
         send_emoticon(username, content)
+      when :image
+        send_image(username, content)
       else
         send_text(username, content)
       end
@@ -371,28 +373,29 @@ module WeChat::Bot
     # @param [String, File] 图片名或图片文件
     # @param [Hash] 非文本消息的参数（可选）
     # @return [Boolean] 发送结果状态
-    # def send_image(username, image, media_id = nil)
-    #   if media_id.nil?
-    #     media_id = upload_file(image)
-    #   end
+    def send_image(username, media_id)
+      # if media_id.nil?
+      #   media_id = upload_file(image)
+      # end
 
-    #   url = "#{store(:index_url)}/webwxsendmsgimg?fun=async&f=json"
+      url = "#{store(:index_url)}/webwxsendmsgimg?fun=async&f=json"
 
-    #   params = params_base_request.merge({
-    #     "Scene" => 0,
-    #     "Msg" => {
-    #       "Type" => type,
-    #       "FromUserName" => @bot.profile.username,
-    #       "ToUserName" => username,
-    #       "MediaId" => mediaId,
-    #       "LocalID" => timestamp,
-    #       "ClientMsgId" => timestamp,
-    #     },
-    #   })
+      params = params_base_request.merge({
+        "Scene" => 0,
+        "Msg" => {
+          "Type" => 3,
+          "FromUserName" => @bot.profile.username,
+          "ToUserName" => username,
+          "MediaId" => "",
+          "Content" => media_id,
+          "LocalID" => timestamp,
+          "ClientMsgId" => timestamp,
+        },
+      })
 
-    #   r = @session.post(url, json: params)
-    #   r.parse(:json)
-    # end
+      r = @session.post(url, json: params)
+      r.parse(:json)
+    end
 
     # 发送表情
     #
