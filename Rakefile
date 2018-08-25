@@ -44,7 +44,12 @@ end
 
 desc 'Enable irb with var `bot` & `client`'
 task :irb do
-  bot = WeChat::Bot.new
+  bot = WeChat::Bot.new do
+    logger = self.logger
+    on :message do |m|
+      logger.info "Message Raw: #{m.raw}"
+    end
+  end
 
   client = bot.client
   client.login
