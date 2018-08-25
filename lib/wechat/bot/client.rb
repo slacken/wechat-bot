@@ -1,6 +1,8 @@
 require "rqrcode"
 require "logger"
 require "uri"
+require "digest"
+require "json"
 
 module WeChat::Bot
   # 微信 API 类
@@ -324,6 +326,8 @@ module WeChat::Bot
       @bot.contact_list.batch_sync(data["MemberList"])
     end
 
+    alias_method :_send, :send
+
     # 消息发送
     #
     # @param [Symbol] type 消息类型，未知类型默认走 :text
@@ -338,7 +342,7 @@ module WeChat::Bot
       when :emoticon
         send_emoticon(username, content)
       when :image
-        send_image(username, content)
+        send_image(username, content: content)
       else
         send_text(username, content)
       end
@@ -367,16 +371,79 @@ module WeChat::Bot
       r.parse(:json)
     end
 
+    # FIXME: 上传图片出问题，未能解决
+    def upload_image(username, file)
+      url = "#{store(:file_url)}/webwxuploadmedia?f=json"
+      
+      filename = File.basename(file.path)
+      content_type = {'png'=>'image/png', 'jpg'=>'image/jpeg', 'jpeg'=>'image/jpeg'}[filename.split('.').last.downcase] || 'application/octet-stream'
+      md5 = Digest::MD5.file(file.path).hexdigest
+
+      headers = {
+        'Host' => 'file.wx.qq.com',
+        'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:42.0) Gecko/20100101 Firefox/42.0',
+        'Accept' => '*/*',
+        'Accept-Language' => 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding' => 'gzip, deflate, br',
+        'Referer' => 'https://wx.qq.com/',
+        'Origin' => 'https://wx.qq.com',
+        'Connection' => 'Keep-Alive'
+      }
+
+      @media_cnt = 1 + (@media_cnt || -1)
+
+      params = {
+        'id' => "WU_FILE_#{@media_cnt}",
+        'name' => filename,
+        'type' => content_type,
+        'lastModifiedDate' => 'Tue Sep 09 2014 17:47:23 GMT+0800 (CST)',
+        'size' => file.size,
+        'mediatype' => 'pic', # pic/video/doc
+        'uploadmediarequest' => JSON.generate(
+          params_base_request.merge({
+            'UploadType' => 2,
+            'ClientMediaId' => timestamp,
+            'TotalLen' => file.size,
+            'StartPos' => 0,
+            'DataLen' => file.size,
+            'MediaType' => 4,
+            'FromUserName' => @bot.profile.username,
+            'ToUserName' => username,
+            'FileMd5' => md5
+            })
+          ),
+        'webwx_data_ticket' => @session.cookie_of('webwx_data_ticket'),
+        'pass_ticket' => store(:pass_ticket),
+        'filename' => ::HTTP::FormData::File.new(file, content_type: content_type)
+        }
+
+      r = @session.post(url, form: params, headers: headers)
+
+      # @bot.logger.info "Response: #{r.inspect}"
+
+      r.parse(:json)
+    end
+
     # 发送图片
     #
     # @param [String] username 目标 UserName
     # @param [String, File] 图片名或图片文件
     # @param [Hash] 非文本消息的参数（可选）
     # @return [Boolean] 发送结果状态
-    def send_image(username, media_id)
+    def send_image(username, **opts)
       # if media_id.nil?
       #   media_id = upload_file(image)
       # end
+      if opts[:media_id]
+        conf = {"MediaId" => opts[:media_id], "Content" => ""}
+      elsif opts[:image]
+        media_id = upload_image(username, opts[:image])
+        conf = {"MediaId" => media_id, "Content" => ""}
+      elsif opts[:content]
+        conf = {"MediaId" => "", "Content" => opts[:content]}
+      else
+        raise RuntimeException, "发送图片参数错误，须提供media_id或content"
+      end
 
       url = "#{store(:index_url)}/webwxsendmsgimg?fun=async&f=json"
 
@@ -386,11 +453,9 @@ module WeChat::Bot
           "Type" => 3,
           "FromUserName" => @bot.profile.username,
           "ToUserName" => username,
-          "MediaId" => "",
-          "Content" => media_id,
           "LocalID" => timestamp,
           "ClientMsgId" => timestamp,
-        },
+        }.merge(conf)
       })
 
       r = @session.post(url, json: params)

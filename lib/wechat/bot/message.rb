@@ -104,7 +104,7 @@ module WeChat::Bot
 
       if match = group_message(message)
         message = match[1]
-        @from_user = @from.find_member(username: match[0])
+        @from_user = @from.find_member(username: match[0]) unless @from.nil?
         @at_message_names = match[2]
       else
         @from_user = @from
