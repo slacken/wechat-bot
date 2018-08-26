@@ -104,11 +104,14 @@ module WeChat::Bot
     # @return [void]
     def start
       @client.login
+      
       @client.contacts
 
       @contact_list.each do |c|
         @logger.debug "Contact: #{c}"
       end
+
+      @client.start_runloop_thread
 
       while true
         break unless @client.logged? || @client.alive?
@@ -117,7 +120,7 @@ module WeChat::Bot
     rescue Interrupt => e
       message = "你使用 Ctrl + C 终止了运行"
       @logger.warn(message)
-      @client.send_text(@config.fireman, "[告警] 意外下线\n#{message}\n#{e.backtrace.join("\n")}") if @client.logged? && @client.alive?
+      @client.send_text(@config.fireman, "[告警] 意外下线\n#{message}") if @client.logged? && @client.alive?
     rescue Exception => e
       message = e.message
       @logger.fatal(e)

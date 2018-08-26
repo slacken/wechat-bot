@@ -52,8 +52,6 @@ module WeChat::Bot
       update_notice_status
 
       @bot.logger.info "用户 [#{@bot.profile.nickname}] 登录成功！"
-
-      start_runloop_thread
     end
 
     # Runloop 监听
