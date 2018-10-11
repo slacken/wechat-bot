@@ -54,6 +54,13 @@ module WeChat::Bot
         response
       end
 
+      def cookie_of(name)
+        cookies.cookies.each do |cookie|
+          return cookie.value if name == cookie.name
+        end
+        nil
+      end
+
       private
 
       # 组装 request 基础请求参数

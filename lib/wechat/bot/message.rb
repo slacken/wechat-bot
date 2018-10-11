@@ -104,17 +104,17 @@ module WeChat::Bot
 
       if match = group_message(message)
         message = match[1]
-        @from_user = @from.find_member(username: match[0])
+        @from_user = @from.find_member(username: match[0]) unless @from.nil?
         @at_message_names = match[2]
       else
         @from_user = @from
       end
 
       @message = message
-      
-      parse_emoticon if @kind == Message::Kind::Emoticon
 
       case @kind
+      when Message::Kind::Emoticon
+        parse_emoticon
       when Message::Kind::ShareCard
         @meta_data = MessageData::ShareCard.parse(@message)
       end
@@ -156,11 +156,6 @@ module WeChat::Bot
       else
         []
       end
-    end
-
-    # 私聊或者群聊被@
-    def talked_to?
-      (source == Contact::Kind::User) || at_members.any?{|member| !!member && (member.username == @raw['ToUserName']) }
     end
 
     private

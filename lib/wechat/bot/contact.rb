@@ -128,6 +128,8 @@ module WeChat::Bot
       "#<#{self.class}:#{object_id.to_s(16)} username='#{username}' nickname='#{nickname}' kind='#{kind}' members=#{members.size}>"
     end
 
+    alias :inspect :to_s
+
     private
 
     # 更新或新写入变量值

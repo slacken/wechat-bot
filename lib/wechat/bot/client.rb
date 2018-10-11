@@ -1,6 +1,8 @@
 require "rqrcode"
 require "logger"
 require "uri"
+require "digest"
+require "json"
 
 module WeChat::Bot
   # 微信 API 类
@@ -50,8 +52,6 @@ module WeChat::Bot
       update_notice_status
 
       @bot.logger.info "用户 [#{@bot.profile.nickname}] 登录成功！"
-
-      start_runloop_thread
     end
 
     # Runloop 监听
@@ -141,7 +141,7 @@ module WeChat::Bot
     #
     # @return [Array]
     def login_status(uuid)
-      timestamp = timestamp
+      timestamp = timestamp()
       params = {
         "loginicon" => "true",
         "uuid" => uuid,
@@ -195,7 +195,7 @@ module WeChat::Bot
     #
     # 掉线后 300 秒可以重新使用此 api 登录获取的联系人和群ID保持不变
     def login_loading
-      url = "#{store(:index_url)}/webwxinit?r=#{timestamp}"
+      url = api_url('webwxinit', r: timestamp)
       r = @session.post(url, json: params_base_request)
       data = r.parse(:json)
 
@@ -215,7 +215,7 @@ module WeChat::Bot
     #
     # 需要解密参数 Code 的值的作用，目前都用的是 3
     def update_notice_status
-      url = "#{store(:index_url)}/webwxstatusnotify?lang=zh_CN&pass_ticket=#{store(:pass_ticket)}"
+      url = api_url('webwxstatusnotify', lang: 'zh_CN', pass_ticket: store(:pass_ticket))
       params = params_base_request.merge({
         "Code"  => 3,
         "FromUserName" => @bot.profile.username,
@@ -267,12 +267,11 @@ module WeChat::Bot
     # 根据 {#sync_check} 接口返回有数据时需要调用该接口
     # @return [void]
     def sync_messages
-      query = {
+      url = api_url('webwxsync', {
         "sid" => store(:sid),
         "skey" => store(:skey),
         "pass_ticket" => store(:pass_ticket)
-      }
-      url = "#{store(:index_url)}/webwxsync?#{URI.encode_www_form(query)}"
+      })
       params = params_base_request.merge({
         "SyncKey" => store(:sync_key),
         "rr" => "-#{timestamp}"
@@ -313,18 +312,19 @@ module WeChat::Bot
     #
     # @return [Hash] 联系人列表
     def contacts
-      query = {
+      url = api_url('webwxgetcontact', {
         "r" => timestamp,
         "pass_ticket" => store(:pass_ticket),
         "skey" => store(:skey)
-      }
-      url = "#{store(:index_url)}/webwxgetcontact?#{URI.encode_www_form(query)}"
+      })
 
       r = @session.post(url, json: {})
       data = r.parse(:json)
 
       @bot.contact_list.batch_sync(data["MemberList"])
     end
+
+    alias_method :_send, :send
 
     # 消息发送
     #
@@ -339,6 +339,8 @@ module WeChat::Bot
       case type
       when :emoticon
         send_emoticon(username, content)
+      when :image
+        send_image(username, content: content)
       else
         send_text(username, content)
       end
@@ -350,7 +352,7 @@ module WeChat::Bot
     # @param [String] text 消息内容
     # @return [Hash<Object,Object>] 发送结果状态
     def send_text(username, text)
-      url = "#{store(:index_url)}/webwxsendmsg"
+      url = api_url('webwxsendmsg')
       params = params_base_request.merge({
         "Scene" => 0,
         "Msg" => {
@@ -367,34 +369,96 @@ module WeChat::Bot
       r.parse(:json)
     end
 
+    # FIXME: 上传图片出问题，未能解决
+    def upload_image(username, file)
+      url = "#{store(:file_url)}/webwxuploadmedia?f=json"
+      
+      filename = File.basename(file.path)
+      content_type = {'png'=>'image/png', 'jpg'=>'image/jpeg', 'jpeg'=>'image/jpeg'}[filename.split('.').last.downcase] || 'application/octet-stream'
+      md5 = Digest::MD5.file(file.path).hexdigest
+
+      headers = {
+        'Host' => 'file.wx.qq.com',
+        'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:42.0) Gecko/20100101 Firefox/42.0',
+        'Accept' => '*/*',
+        'Accept-Language' => 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding' => 'gzip, deflate, br',
+        'Referer' => 'https://wx.qq.com/',
+        'Origin' => 'https://wx.qq.com',
+        'Connection' => 'Keep-Alive'
+      }
+
+      @media_cnt = 1 + (@media_cnt || -1)
+
+      params = {
+        'id' => "WU_FILE_#{@media_cnt}",
+        'name' => filename,
+        'type' => content_type,
+        'lastModifiedDate' => 'Tue Sep 09 2014 17:47:23 GMT+0800 (CST)',
+        'size' => file.size,
+        'mediatype' => 'pic', # pic/video/doc
+        'uploadmediarequest' => JSON.generate(
+          params_base_request.merge({
+            'UploadType' => 2,
+            'ClientMediaId' => timestamp,
+            'TotalLen' => file.size,
+            'StartPos' => 0,
+            'DataLen' => file.size,
+            'MediaType' => 4,
+            'FromUserName' => @bot.profile.username,
+            'ToUserName' => username,
+            'FileMd5' => md5
+            })
+          ),
+        'webwx_data_ticket' => @session.cookie_of('webwx_data_ticket'),
+        'pass_ticket' => store(:pass_ticket),
+        'filename' => ::HTTP::FormData::File.new(file, content_type: content_type)
+        }
+
+      r = @session.post(url, form: params, headers: headers)
+
+      # @bot.logger.info "Response: #{r.inspect}"
+
+      r.parse(:json)
+    end
+
     # 发送图片
     #
     # @param [String] username 目标 UserName
     # @param [String, File] 图片名或图片文件
     # @param [Hash] 非文本消息的参数（可选）
     # @return [Boolean] 发送结果状态
-    # def send_image(username, image, media_id = nil)
-    #   if media_id.nil?
-    #     media_id = upload_file(image)
-    #   end
+    def send_image(username, **opts)
+      # if media_id.nil?
+      #   media_id = upload_file(image)
+      # end
+      if opts[:media_id]
+        conf = {"MediaId" => opts[:media_id], "Content" => ""}
+      elsif opts[:image]
+        media_id = upload_image(username, opts[:image])
+        conf = {"MediaId" => media_id, "Content" => ""}
+      elsif opts[:content]
+        conf = {"MediaId" => "", "Content" => opts[:content]}
+      else
+        raise RuntimeException, "发送图片参数错误，须提供media_id或content"
+      end
 
-    #   url = "#{store(:index_url)}/webwxsendmsgimg?fun=async&f=json"
+      url = "#{store(:index_url)}/webwxsendmsgimg?fun=async&f=json"
 
-    #   params = params_base_request.merge({
-    #     "Scene" => 0,
-    #     "Msg" => {
-    #       "Type" => type,
-    #       "FromUserName" => @bot.profile.username,
-    #       "ToUserName" => username,
-    #       "MediaId" => mediaId,
-    #       "LocalID" => timestamp,
-    #       "ClientMsgId" => timestamp,
-    #     },
-    #   })
+      params = params_base_request.merge({
+        "Scene" => 0,
+        "Msg" => {
+          "Type" => 3,
+          "FromUserName" => @bot.profile.username,
+          "ToUserName" => username,
+          "LocalID" => timestamp,
+          "ClientMsgId" => timestamp,
+        }.merge(conf)
+      })
 
-    #   r = @session.post(url, json: params)
-    #   r.parse(:json)
-    # end
+      r = @session.post(url, json: params)
+      r.parse(:json)
+    end
 
     # 发送表情
     #
@@ -405,12 +469,11 @@ module WeChat::Bot
     #
     # @return [Hash<Object,Object>] 发送结果状态
     def send_emoticon(username, emoticon_id)
-      query = {
+      url = api_url('webwxsendemoticon', {
         'fun' => 'sys',
         'pass_ticket' => store(:pass_ticket),
         'lang' => 'zh_CN'
-      }
-      url = "#{store(:index_url)}/webwxsendemoticon?#{URI.encode_www_form(query)}"
+      })
       params = params_base_request.merge({
         "Scene" => 0,
         "Msg" => {
@@ -435,7 +498,7 @@ module WeChat::Bot
     # @param [String] message_id
     # @return [TempFile]
     def download_image(message_id)
-      url = "#{store(:index_url)}/webwxgetmsgimg"
+      url = api_url('webwxgetmsgimg')
       params = {
         "msgid" => message_id,
         "skey" => store(:skey)
@@ -460,7 +523,7 @@ module WeChat::Bot
     # @param [Array<String>] users
     # @return [Hash<Object, Object>]
     def create_group(*users)
-      url = "#{store(:index_url)}/webwxcreatechatroom?r=#{timestamp}"
+      url = api_url('webwxcreatechatroom', r: timestamp, pass_ticket: store(:pass_ticket))
       params = params_base_request.merge({
         "Topic" => "",
         "MemberCount" => users.size,
@@ -471,11 +534,66 @@ module WeChat::Bot
       r.parse(:json)
     end
 
+    ##### 
+    # 以下接口都参考：https://github.com/littlecodersh/ItChat/blob/master/itchat/components/contact.py
+
+    # 更新群组
+    def update_group(username, fun, update_key, update_value)
+      url = api_url('webwxupdatechatroom', {fun: fun, pass_ticket: store(:pass_ticket)})
+      params = params_base_request.merge({
+        "ChatRoomName" => username,
+        update_key => update_value
+        })
+      r = @session.post(url, json: params)
+      r.parse(:json)
+    end
+
+    # 修改群组名称
+    def set_group_name(username, name)
+      update_group(username, 'modtopic', 'NewTopic', name)
+    end
+
+    # 删除群组成员
+    def delete_group_member(username, *users)
+      update_group(username, 'delmember', 'DelMemberList', users.join(","))
+    end
+
+    # 群组邀请
+    def invite_group_member(username, *users)
+      update_group(username, 'invitemember', 'InviteMemberList', users.join(","))
+    end
+
+    # 群组添加
+    def add_group_member(username, *users)
+      update_group(username, 'addmember', 'AddMemberList', users.join(","))
+    end
+
+    # 添加好友
+    #
+    # @param [Integer] status: 2-添加 3-接受
+    def add_friend(username, status = 2, verify_content='')
+      url = api_url('webwxverifyuser', {r: timestamp, pass_ticket: store(:pass_ticket)})
+      params = params_base_request.merge({
+        "Opcode" => status, # 3
+        "VerifyUserListSize" => 1,
+        "VerifyUserList" => [{
+          "Value" => username,
+          "VerifyUserTicket" => ''}],
+        "VerifyContent" => verify_content,
+        "SceneListCount" => 1,
+        "SceneList" => [33],
+        "skey" => store(:skey)
+      })
+      r = @session.post(url, json: params)
+      r.parse(:json)
+    end
+    ##### 
+
     # 登出
     #
     # @return [void]
     def logout
-      url = "#{store(:index_url)}/webwxlogout"
+      url = api_url('webwxlogout')
       params = {
         "redirect" => 1,
         "type"  => 1,
@@ -503,6 +621,10 @@ module WeChat::Bot
     end
 
     private
+
+    def api_url(path, query = {})
+      "#{store(:index_url)}/#{path}#{query.empty? ? '' : '?'+URI.encode_www_form(query)}"
+    end
 
     # 保存和获取存储数据
     #

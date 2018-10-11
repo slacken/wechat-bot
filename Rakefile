@@ -8,6 +8,8 @@ RSpec::Core::RakeTask.new(:spec)
 require 'rubocop/rake_task'
 RuboCop::RakeTask.new
 
+require 'irb'
+
 task :default => [:rubocop, :spec]
 
 desc 'Run a sample wechat bot'
@@ -38,4 +40,20 @@ task :bot do
   end
 
   bot.start
+end
+
+desc 'Enable irb with var `bot` & `client`'
+task :irb do
+  bot = WeChat::Bot.new do
+    logger = self.logger
+    on :message do |m|
+      logger.info "Message Raw: #{m.raw}"
+    end
+  end
+
+  client = bot.client
+  client.login
+  client.contacts
+
+  binding.irb # since ruby-2.4
 end
